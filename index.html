@@ -923,23 +923,39 @@ function ensureSpace(doc, y, needed, margin){
 }
 
 // 한글 지원 폰트(나눔고딕) 로드 및 등록 — jsPDF 기본 폰트는 한글 글리프가 없어 깨지므로 필요
+// 1차 CDN이 실패할 경우를 대비해 예비 CDN도 함께 시도
 const KOREAN_FONT_URLS = {
-  normal: 'https://cdn.jsdelivr.net/gh/google/fonts/ofl/nanumgothic/NanumGothic-Regular.ttf',
-  bold: 'https://cdn.jsdelivr.net/gh/google/fonts/ofl/nanumgothic/NanumGothic-Bold.ttf'
+  normal: [
+    'https://cdn.jsdelivr.net/gh/fonts-archive/NanumGothic/NanumGothic.ttf',
+    'https://cdn.jsdelivr.net/gh/google/fonts/ofl/nanumgothic/NanumGothic-Regular.ttf'
+  ],
+  bold: [
+    'https://cdn.jsdelivr.net/gh/fonts-archive/NanumGothic/NanumGothicBold.ttf',
+    'https://cdn.jsdelivr.net/gh/google/fonts/ofl/nanumgothic/NanumGothic-Bold.ttf'
+  ]
 };
 const fontCache = {normal: null, bold: null};
 
-async function fetchFontBase64(url){
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('폰트 파일을 불러오지 못했습니다: ' + url);
-  const buf = await res.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-  let binary = '';
-  const chunkSize = 0x8000;
-  for(let i = 0; i < bytes.length; i += chunkSize){
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+async function fetchFontBase64(urls){
+  let lastErr;
+  for(const url of urls){
+    try{
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const buf = await res.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = '';
+      const chunkSize = 0x8000;
+      for(let i = 0; i < bytes.length; i += chunkSize){
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
+    }catch(err){
+      console.warn('폰트 로드 실패, 다음 경로 시도:', url, err);
+      lastErr = err;
+    }
   }
-  return btoa(binary);
+  throw lastErr || new Error('폰트를 불러오지 못했습니다.');
 }
 
 async function ensureKoreanFont(doc){

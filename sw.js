@@ -1,4 +1,4 @@
-const CACHE_NAME = 'patch-sampler-v3';
+const CACHE_NAME = 'patch-sampler-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -7,8 +7,8 @@ const ASSETS = [
   './icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js',
-  'https://cdn.jsdelivr.net/gh/google/fonts/ofl/nanumgothic/NanumGothic-Regular.ttf',
-  'https://cdn.jsdelivr.net/gh/google/fonts/ofl/nanumgothic/NanumGothic-Bold.ttf'
+  'https://cdn.jsdelivr.net/gh/fonts-archive/NanumGothic/NanumGothic.ttf',
+  'https://cdn.jsdelivr.net/gh/fonts-archive/NanumGothic/NanumGothicBold.ttf'
 ];
 
 self.addEventListener('install', (event) => {
