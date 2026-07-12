@@ -1,4 +1,4 @@
-const CACHE_NAME = 'patch-sampler-v1';
+const CACHE_NAME = 'patch-sampler-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -23,8 +23,19 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// 캐시 우선, 없으면 네트워크에서 가져온 뒤 캐시에 저장 (한글 폰트, jsPDF 등 CDN 리소스도 최초 1회 이후 오프라인 재사용 가능)
 self.addEventListener('fetch', (event) => {
+  if(event.request.method !== 'GET') return;
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    caches.match(event.request).then((cached) => {
+      if(cached) return cached;
+      return fetch(event.request).then((response) => {
+        if(response && response.status === 200){
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      }).catch(() => cached);
+    })
   );
 });

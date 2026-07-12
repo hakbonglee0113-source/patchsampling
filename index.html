@@ -345,6 +345,14 @@ textarea{
           <input type="text" id="habitatId" placeholder="예: HB-2026-JJ-03">
         </div>
         <div class="field">
+          <label for="adminName">행정지명</label>
+          <input type="text" id="adminName" placeholder="예: 경상북도 안동시 OO면 OO리">
+        </div>
+        <div class="field">
+          <label for="habitatCoord">서식지 대표 지리좌표</label>
+          <input type="text" id="habitatCoord" placeholder="위도, 경도 (예: 36.5684, 128.7294)">
+        </div>
+        <div class="field">
           <label for="surveyDate">조사 날짜</label>
           <input type="date" id="surveyDate">
         </div>
@@ -413,6 +421,8 @@ textarea{
         <div class="stamp-mark">조사<br>대상<br>확정</div>
         <div class="result-meta">
           <div id="metaHabitat"></div>
+          <div id="metaAdmin"></div>
+          <div id="metaCoord"></div>
           <div id="metaDate"></div>
           <div id="metaRatio"></div>
           <div id="metaTimestamp"></div>
@@ -621,12 +631,16 @@ function runDraw(){
   const excluded = shuffled.slice(n).slice().sort(byNum);
 
   const habitatId = document.getElementById('habitatId').value || '(미입력)';
+  const adminName = document.getElementById('adminName').value || '(미입력)';
+  const habitatCoord = document.getElementById('habitatCoord').value || '(미입력)';
   const surveyDate = document.getElementById('surveyDate').value || '(미입력)';
   const timestamp = new Date().toLocaleString('ko-KR');
 
-  lastResult = {habitatId, surveyDate, timestamp, total: patches.length, n, chosen, excluded};
+  lastResult = {habitatId, adminName, habitatCoord, surveyDate, timestamp, total: patches.length, n, chosen, excluded};
 
   document.getElementById('metaHabitat').textContent = `Habitat ID: ${habitatId}`;
+  document.getElementById('metaAdmin').textContent = `행정지명: ${adminName}`;
+  document.getElementById('metaCoord').textContent = `대표 지리좌표: ${habitatCoord}`;
   document.getElementById('metaDate').textContent = `조사 날짜: ${surveyDate}`;
   document.getElementById('metaRatio').textContent = `추출: ${n} / ${patches.length} 패치 (60%)`;
   document.getElementById('metaTimestamp').textContent = `추출 시각: ${timestamp}`;
@@ -657,7 +671,7 @@ document.getElementById('excludedToggle').addEventListener('click', () => {
 function buildTextResult(){
   if(!lastResult) return '';
   const r = lastResult;
-  let text = `Habitat ID: ${r.habitatId}\n조사 날짜: ${r.surveyDate}\n추출 시각: ${r.timestamp}\n추출: ${r.n} / ${r.total} (60%)\n\n조사 대상 패치:\n`;
+  let text = `Habitat ID: ${r.habitatId}\n행정지명: ${r.adminName}\n대표 지리좌표: ${r.habitatCoord}\n조사 날짜: ${r.surveyDate}\n추출 시각: ${r.timestamp}\n추출: ${r.n} / ${r.total} (60%)\n\n조사 대상 패치:\n`;
   text += r.chosen.map(p => `#${p.number}\t${p.coord || '—'}`).join('\n');
   return text;
 }
@@ -669,12 +683,12 @@ document.getElementById('copyBtn').addEventListener('click', () => {
 document.getElementById('downloadBtn').addEventListener('click', () => {
   if(!lastResult) return;
   const r = lastResult;
-  let csv = 'habitat_id,survey_date,extraction_timestamp,patch_number,coordinates,status,photo_count\n';
+  let csv = 'habitat_id,admin_name,habitat_coord,survey_date,extraction_timestamp,patch_number,coordinates,status,photo_count\n';
   r.chosen.forEach(p => {
-    csv += `${r.habitatId},${r.surveyDate},${r.timestamp},${p.number},"${p.coord}",selected,${p.photos ? p.photos.length : 0}\n`;
+    csv += `${r.habitatId},"${r.adminName}","${r.habitatCoord}",${r.surveyDate},${r.timestamp},${p.number},"${p.coord}",selected,${p.photos ? p.photos.length : 0}\n`;
   });
   r.excluded.forEach(p => {
-    csv += `${r.habitatId},${r.surveyDate},${r.timestamp},${p.number},"${p.coord}",not_selected,${p.photos ? p.photos.length : 0}\n`;
+    csv += `${r.habitatId},"${r.adminName}","${r.habitatCoord}",${r.surveyDate},${r.timestamp},${p.number},"${p.coord}",not_selected,${p.photos ? p.photos.length : 0}\n`;
   });
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
@@ -695,9 +709,40 @@ function ensureSpace(doc, y, needed, margin){
   return y;
 }
 
-document.getElementById('pdfBtn').addEventListener('click', generatePDF);
+// 한글 지원 폰트(나눔고딕) 로드 및 등록 — jsPDF 기본 폰트는 한글 글리프가 없어 깨지므로 필요
+const KOREAN_FONT_URLS = {
+  normal: 'https://cdn.jsdelivr.net/gh/google/fonts/ofl/nanumgothic/NanumGothic-Regular.ttf',
+  bold: 'https://cdn.jsdelivr.net/gh/google/fonts/ofl/nanumgothic/NanumGothic-Bold.ttf'
+};
+const fontCache = {normal: null, bold: null};
 
-function generatePDF(){
+async function fetchFontBase64(url){
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('폰트 파일을 불러오지 못했습니다: ' + url);
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for(let i = 0; i < bytes.length; i += chunkSize){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function ensureKoreanFont(doc){
+  if(!fontCache.normal) fontCache.normal = await fetchFontBase64(KOREAN_FONT_URLS.normal);
+  if(!fontCache.bold) fontCache.bold = await fetchFontBase64(KOREAN_FONT_URLS.bold);
+  doc.addFileToVFS('NanumGothic-Regular.ttf', fontCache.normal);
+  doc.addFont('NanumGothic-Regular.ttf', 'NanumGothic', 'normal');
+  doc.addFileToVFS('NanumGothic-Bold.ttf', fontCache.bold);
+  doc.addFont('NanumGothic-Bold.ttf', 'NanumGothic', 'bold');
+  doc.setFont('NanumGothic', 'normal');
+}
+
+const pdfBtn = document.getElementById('pdfBtn');
+pdfBtn.addEventListener('click', generatePDF);
+
+async function generatePDF(){
   if(!lastResult){ alert('먼저 무작위 추출을 실행해주세요.'); return; }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4'});
@@ -706,15 +751,31 @@ function generatePDF(){
   const contentW = pageW - marginX * 2;
   let y = 50;
 
-  doc.setFont('helvetica','bold');
+  const originalLabel = pdfBtn.textContent;
+  pdfBtn.disabled = true;
+  pdfBtn.textContent = 'PDF 생성 중…';
+
+  try{
+    await ensureKoreanFont(doc);
+  }catch(err){
+    console.error(err);
+    alert('한글 폰트를 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해주세요.');
+    pdfBtn.disabled = false;
+    pdfBtn.textContent = originalLabel;
+    return;
+  }
+
+  doc.setFont('NanumGothic','bold');
   doc.setFontSize(17);
   doc.text('패치 무작위 추출 조사기록', marginX, y);
   y += 26;
 
-  doc.setFont('helvetica','normal');
+  doc.setFont('NanumGothic','normal');
   doc.setFontSize(10);
   [
     `Habitat ID: ${lastResult.habitatId}`,
+    `행정지명: ${lastResult.adminName}`,
+    `대표 지리좌표: ${lastResult.habitatCoord}`,
     `조사 날짜: ${lastResult.surveyDate}`,
     `총 패치 수: ${lastResult.total}`,
     `추출 패치 수: ${lastResult.n} (60%)`,
@@ -730,6 +791,7 @@ function generatePDF(){
       const scale = Math.min(maxW / props.width, maxH / props.height, 1);
       const w = props.width * scale, h = props.height * scale;
       y = ensureSpace(doc, y, h + 22, marginTopBottom);
+      doc.setFont('NanumGothic','normal');
       doc.setFontSize(9);
       doc.text('서식지 전경사진', marginX, y);
       y += 8;
@@ -739,7 +801,7 @@ function generatePDF(){
   }
 
   y = ensureSpace(doc, y, 40, marginTopBottom);
-  doc.setFont('helvetica','bold');
+  doc.setFont('NanumGothic','bold');
   doc.setFontSize(12);
   doc.text('조사 대상 패치 목록 (무작위 추출)', marginX, y);
 
@@ -748,12 +810,12 @@ function generatePDF(){
     margin: {left: marginX, right: marginX},
     head: [['패치 번호','좌표']],
     body: lastResult.chosen.map(p => [p.number, p.coord || '—']),
-    styles: {fontSize:9, cellPadding:4},
-    headStyles: {fillColor:[47,74,60]},
+    styles: {font:'NanumGothic', fontStyle:'normal', fontSize:9, cellPadding:4},
+    headStyles: {font:'NanumGothic', fontStyle:'bold', fillColor:[47,74,60]},
   });
   y = doc.lastAutoTable.finalY + 20;
 
-  doc.setFont('helvetica','normal');
+  doc.setFont('NanumGothic','normal');
   doc.setFontSize(9);
   const exText = `미선정 패치: ${lastResult.excluded.map(p => '#'+p.number).join(', ') || '없음'}`;
   const splitEx = doc.splitTextToSize(exText, contentW);
@@ -764,7 +826,7 @@ function generatePDF(){
   const patchesWithPhotos = patches.filter(p => p.photos && p.photos.length > 0);
   if(patchesWithPhotos.length > 0){
     y = ensureSpace(doc, y, 30, marginTopBottom);
-    doc.setFont('helvetica','bold');
+    doc.setFont('NanumGothic','bold');
     doc.setFontSize(12);
     doc.text('패치별 현장사진 (발견된 모든 패치)', marginX, y);
     y += 18;
@@ -773,7 +835,7 @@ function generatePDF(){
 
     patchesWithPhotos.forEach(p => {
       y = ensureSpace(doc, y, 26, marginTopBottom);
-      doc.setFont('helvetica','bold');
+      doc.setFont('NanumGothic','bold');
       doc.setFontSize(10);
       const tag = selectedNums.has(p.number) ? '[조사대상]' : '[미선정]';
       doc.text(`#${p.number}  (${p.coord || '좌표 미입력'})  ${tag}`, marginX, y);
@@ -805,6 +867,9 @@ function generatePDF(){
 
   const filename = `patch_survey_${(lastResult.habitatId||'habitat').replace(/\s+/g,'_')}_${lastResult.surveyDate}.pdf`;
   doc.save(filename);
+
+  pdfBtn.disabled = false;
+  pdfBtn.textContent = originalLabel;
 }
 
 // ---- PWA: 서비스워커 등록 (오프라인 사용 및 앱 설치 지원) ----
