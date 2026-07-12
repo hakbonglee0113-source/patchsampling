@@ -319,6 +319,36 @@ textarea{
   cursor:pointer;
 }
 .photo-col{min-width:150px;}
+
+/* 자동저장 / 복원 배너 */
+.autosave-status{
+  font-size:10.5px;
+  color:var(--khaki);
+  margin-top:6px;
+}
+.restore-banner{
+  max-width:760px;
+  margin:0 auto 28px;
+  background:var(--warn-bg);
+  border:1px solid var(--stamp);
+  border-radius:6px;
+  padding:14px 18px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:14px;
+  flex-wrap:wrap;
+  font-size:13px;
+}
+.restore-banner-meta{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11.5px;
+  color:var(--ink-soft);
+  margin-top:4px;
+}
+.restore-banner-actions{display:flex;gap:8px;flex-shrink:0;}
+.restore-banner-actions button{padding:8px 14px;font-size:12.5px;}
+#resetAllBtn{border-color:var(--ink-soft);color:var(--ink-soft);}
 </style>
 </head>
 <body>
@@ -329,8 +359,23 @@ textarea{
       <div class="eyebrow">Field Sampling Tool · 조사 준비 도구</div>
       <h1>패치 무작위 추출기</h1>
     </div>
-    <div class="top-meta">RANDOM PATCH SAMPLER<br>60% STRATIFIED-FREE DRAW</div>
+    <div class="top-meta">
+      RANDOM PATCH SAMPLER<br>60% STRATIFIED-FREE DRAW
+      <div id="autosaveStatus" class="autosave-status">자동저장 대기 중</div>
+      <button type="button" class="secondary" id="resetAllBtn" style="margin-top:8px;font-size:11px;padding:4px 9px;">새 조사 시작 (초기화)</button>
+    </div>
   </header>
+
+  <div id="restoreBanner" class="restore-banner" style="display:none;">
+    <div>
+      <strong>이전에 작성 중이던 조사 기록이 있습니다.</strong>
+      <div id="restoreBannerMeta" class="restore-banner-meta"></div>
+    </div>
+    <div class="restore-banner-actions">
+      <button type="button" id="restoreLoadBtn">불러오기</button>
+      <button type="button" class="secondary" id="restoreDiscardBtn">새로 시작</button>
+    </div>
+  </div>
 
   <!-- 01 기본정보 -->
   <section>
@@ -473,8 +518,160 @@ const resultWrap = document.getElementById('resultWrap');
 const applyBulkBtn = document.getElementById('applyBulkBtn');
 const bulkPaste = document.getElementById('bulkPaste');
 const patchPhotoInput = document.getElementById('patchPhotoInput');
+const autosaveStatusEl = document.getElementById('autosaveStatus');
+const restoreBanner = document.getElementById('restoreBanner');
 
 function sampleSize(n){ return Math.round(n * 0.6); }
+
+// ==== 자동저장 (IndexedDB) ====
+const IDB_NAME = 'patchSamplerDB';
+const IDB_STORE = 'autosave';
+const IDB_KEY = 'current';
+
+function openIDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPut(key, value){
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGetValue(key){
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbDeleteValue(key){
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function collectState(){
+  return {
+    habitatId: document.getElementById('habitatId').value,
+    adminName: document.getElementById('adminName').value,
+    habitatCoord: document.getElementById('habitatCoord').value,
+    surveyDate: document.getElementById('surveyDate').value,
+    totalPatches: totalPatchesInput.value,
+    habitatPhoto,
+    patches,
+    lastResult,
+    savedAt: new Date().toISOString()
+  };
+}
+
+let autosaveTimer = null;
+function scheduleAutosave(){
+  clearTimeout(autosaveTimer);
+  if(autosaveStatusEl) autosaveStatusEl.textContent = '저장 중…';
+  autosaveTimer = setTimeout(async () => {
+    try{
+      await idbPut(IDB_KEY, collectState());
+      if(autosaveStatusEl) autosaveStatusEl.textContent = `자동저장됨 · ${new Date().toLocaleTimeString('ko-KR')}`;
+    }catch(err){
+      console.error('autosave 실패', err);
+      if(autosaveStatusEl) autosaveStatusEl.textContent = '자동저장 실패';
+    }
+  }, 600);
+}
+
+async function clearAutosave(){
+  try{ await idbDeleteValue(IDB_KEY); }catch(err){ console.error(err); }
+}
+
+function resetAllState(){
+  patches = [];
+  habitatPhoto = null;
+  lastResult = null;
+  document.getElementById('habitatId').value = '';
+  document.getElementById('adminName').value = '';
+  document.getElementById('habitatCoord').value = '';
+  document.getElementById('surveyDate').value = '';
+  totalPatchesInput.value = '';
+  renderHabitatPhotoPreview();
+  patchTableBody.innerHTML = '';
+  patchSection.style.display = 'none';
+  drawSection.style.display = 'none';
+  resultWrap.style.display = 'none';
+  if(autosaveStatusEl) autosaveStatusEl.textContent = '자동저장 대기 중';
+}
+
+document.getElementById('resetAllBtn').addEventListener('click', async () => {
+  if(!confirm('현재 작성 중인 모든 입력 내용(패치 목록, 사진 포함)이 삭제됩니다. 새 조사를 시작하시겠습니까?')) return;
+  await clearAutosave();
+  resetAllState();
+});
+
+document.getElementById('restoreDiscardBtn').addEventListener('click', async () => {
+  await clearAutosave();
+  restoreBanner.style.display = 'none';
+});
+
+document.getElementById('restoreLoadBtn').addEventListener('click', () => {
+  restoreSavedState(window.__pendingRestore);
+  restoreBanner.style.display = 'none';
+});
+
+function restoreSavedState(saved){
+  if(!saved) return;
+  document.getElementById('habitatId').value = saved.habitatId || '';
+  document.getElementById('adminName').value = saved.adminName || '';
+  document.getElementById('habitatCoord').value = saved.habitatCoord || '';
+  document.getElementById('surveyDate').value = saved.surveyDate || '';
+  totalPatchesInput.value = saved.totalPatches || '';
+
+  habitatPhoto = saved.habitatPhoto || null;
+  renderHabitatPhotoPreview();
+
+  patches = saved.patches || [];
+  if(patches.length){
+    renderPatchTable();
+    patchSection.style.display = 'block';
+    drawSection.style.display = 'block';
+    patchCountLabel.textContent = `총 ${patches.length}개`;
+    totalPreview.textContent = patches.length;
+    sampleSizePreview.textContent = sampleSize(patches.length);
+  }
+
+  if(saved.lastResult){
+    lastResult = saved.lastResult;
+    renderResultUI(lastResult);
+    resultWrap.style.display = 'block';
+  }
+
+  if(autosaveStatusEl) autosaveStatusEl.textContent = '이전 기록을 불러왔습니다';
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  try{
+    const saved = await idbGetValue(IDB_KEY);
+    if(saved && (saved.habitatId || saved.totalPatches || (saved.patches && saved.patches.length))){
+      window.__pendingRestore = saved;
+      const savedTime = saved.savedAt ? new Date(saved.savedAt).toLocaleString('ko-KR') : '';
+      document.getElementById('restoreBannerMeta').textContent =
+        `Habitat ID: ${saved.habitatId || '(미입력)'} · 패치 ${saved.patches ? saved.patches.length : 0}개 · 저장 시각: ${savedTime}`;
+      restoreBanner.style.display = 'flex';
+    }
+  }catch(err){ console.error('자동저장 불러오기 실패', err); }
+});
 
 // ---- 이미지 압축 (휴대폰 카메라 원본 대응) ----
 function compressImage(file, maxWidth = 1000, quality = 0.72){
@@ -507,6 +704,7 @@ document.getElementById('habitatPhotoInput').addEventListener('change', async (e
   if(!file) return;
   habitatPhoto = await compressImage(file);
   renderHabitatPhotoPreview();
+  scheduleAutosave();
   e.target.value = '';
 });
 function renderHabitatPhotoPreview(){
@@ -516,8 +714,14 @@ function renderHabitatPhotoPreview(){
   document.getElementById('removeHabitatPhoto').addEventListener('click', () => {
     habitatPhoto = null;
     renderHabitatPhotoPreview();
+    scheduleAutosave();
   });
 }
+
+// ---- 기본정보 입력 변경 시 자동저장 ----
+['habitatId','adminName','habitatCoord','surveyDate'].forEach(id => {
+  document.getElementById(id).addEventListener('input', scheduleAutosave);
+});
 
 // ---- 패치 목록 생성 ----
 genTableBtn.addEventListener('click', () => {
@@ -534,6 +738,7 @@ genTableBtn.addEventListener('click', () => {
   totalPreview.textContent = n;
   sampleSizePreview.textContent = sampleSize(n);
   resultWrap.style.display = 'none';
+  scheduleAutosave();
 });
 
 function renderPatchTable(){
@@ -563,6 +768,7 @@ function renderPatchTable(){
       const idx = +e.target.dataset.idx;
       const field = e.target.dataset.field;
       patches[idx][field] = e.target.value;
+      scheduleAutosave();
     });
   });
   patchTableBody.querySelectorAll('button[data-photo-idx]').forEach(btn => {
@@ -577,6 +783,7 @@ function renderPatchTable(){
       const pi = +span.dataset.removePi;
       patches[idx].photos.splice(pi, 1);
       renderPatchTable();
+      scheduleAutosave();
     });
   });
 }
@@ -589,6 +796,7 @@ patchPhotoInput.addEventListener('change', async (e) => {
     patches[currentPhotoTargetIdx].photos.push(compressed);
   }
   renderPatchTable();
+  scheduleAutosave();
   e.target.value = '';
 });
 
@@ -604,6 +812,7 @@ applyBulkBtn.addEventListener('click', () => {
     if(target){ target.coord = coord; applied++; }
   });
   renderPatchTable();
+  scheduleAutosave();
   alert(`${applied}개 패치에 좌표를 적용했습니다.`);
 });
 
@@ -637,27 +846,31 @@ function runDraw(){
   const timestamp = new Date().toLocaleString('ko-KR');
 
   lastResult = {habitatId, adminName, habitatCoord, surveyDate, timestamp, total: patches.length, n, chosen, excluded};
-
-  document.getElementById('metaHabitat').textContent = `Habitat ID: ${habitatId}`;
-  document.getElementById('metaAdmin').textContent = `행정지명: ${adminName}`;
-  document.getElementById('metaCoord').textContent = `대표 지리좌표: ${habitatCoord}`;
-  document.getElementById('metaDate').textContent = `조사 날짜: ${surveyDate}`;
-  document.getElementById('metaRatio').textContent = `추출: ${n} / ${patches.length} 패치 (60%)`;
-  document.getElementById('metaTimestamp').textContent = `추출 시각: ${timestamp}`;
-
-  document.getElementById('chosenChips').innerHTML =
-    chosen.map(p => `<span class="chip">#${p.number}</span>`).join('');
-
-  document.getElementById('chosenTableBody').innerHTML =
-    chosen.map(p => `<tr><td>${p.number}</td><td>${p.coord || '—'}</td></tr>`).join('');
-
-  const exList = document.getElementById('excludedList');
-  exList.innerHTML = excluded.map(p => `#${p.number}`).join(', ') || '없음';
-  exList.classList.remove('open');
-  document.getElementById('excludedToggle').textContent = '▸ 미선정 패치 목록 보기';
+  renderResultUI(lastResult);
+  scheduleAutosave();
 
   resultWrap.style.display = 'block';
   resultWrap.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function renderResultUI(r){
+  document.getElementById('metaHabitat').textContent = `Habitat ID: ${r.habitatId}`;
+  document.getElementById('metaAdmin').textContent = `행정지명: ${r.adminName}`;
+  document.getElementById('metaCoord').textContent = `대표 지리좌표: ${r.habitatCoord}`;
+  document.getElementById('metaDate').textContent = `조사 날짜: ${r.surveyDate}`;
+  document.getElementById('metaRatio').textContent = `추출: ${r.n} / ${r.total} 패치 (60%)`;
+  document.getElementById('metaTimestamp').textContent = `추출 시각: ${r.timestamp}`;
+
+  document.getElementById('chosenChips').innerHTML =
+    r.chosen.map(p => `<span class="chip">#${p.number}</span>`).join('');
+
+  document.getElementById('chosenTableBody').innerHTML =
+    r.chosen.map(p => `<tr><td>${p.number}</td><td>${p.coord || '—'}</td></tr>`).join('');
+
+  const exList = document.getElementById('excludedList');
+  exList.innerHTML = r.excluded.map(p => `#${p.number}`).join(', ') || '없음';
+  exList.classList.remove('open');
+  document.getElementById('excludedToggle').textContent = '▸ 미선정 패치 목록 보기';
 }
 
 document.getElementById('excludedToggle').addEventListener('click', () => {

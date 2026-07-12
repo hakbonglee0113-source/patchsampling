@@ -1,15 +1,24 @@
-const CACHE_NAME = 'patch-sampler-v2';
+const CACHE_NAME = 'patch-sampler-v3';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js',
+  'https://cdn.jsdelivr.net/gh/google/fonts/ofl/nanumgothic/NanumGothic-Regular.ttf',
+  'https://cdn.jsdelivr.net/gh/google/fonts/ofl/nanumgothic/NanumGothic-Bold.ttf'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const results = await Promise.allSettled(ASSETS.map((url) => cache.add(url)));
+      results.forEach((r, i) => {
+        if(r.status === 'rejected') console.warn('precache 실패:', ASSETS[i], r.reason);
+      });
+    })
   );
   self.skipWaiting();
 });
