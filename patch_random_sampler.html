@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>패치 무작위 추출기</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root{
+  --paper:#F6F3EA;
+  --paper-card:#FFFFFF;
+  --ink:#23291F;
+  --ink-soft:#5B6154;
+  --forest:#2F4A3C;
+  --forest-deep:#1E3129;
+  --khaki:#8B8560;
+  --stamp:#B5442E;
+  --line:#DAD5C4;
+  --warn-bg:#FBF0E4;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--paper);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(0,0,0,0.035) 1px, transparent 0);
+  background-size:22px 22px;
+  color:var(--ink);
+  font-family:'Noto Sans KR',sans-serif;
+  padding:32px 16px 80px;
+  line-height:1.55;
+}
+.wrap{max-width:760px;margin:0 auto;}
+
+header.top{
+  border-bottom:2px solid var(--ink);
+  padding-bottom:18px;
+  margin-bottom:34px;
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-end;
+  gap:16px;
+  flex-wrap:wrap;
+}
+.eyebrow{
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;
+  letter-spacing:0.14em;
+  color:var(--forest);
+  text-transform:uppercase;
+  margin-bottom:6px;
+}
+h1{
+  font-family:'Noto Serif KR',serif;
+  font-weight:700;
+  font-size:30px;
+  margin:0;
+  color:var(--ink);
+}
+.top-meta{
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;
+  color:var(--ink-soft);
+  text-align:right;
+}
+
+section{margin-bottom:36px;}
+.sec-head{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  margin-bottom:16px;
+}
+.sec-num{
+  font-family:'JetBrains Mono',monospace;
+  font-size:13px;
+  color:var(--paper);
+  background:var(--forest);
+  border-radius:3px;
+  padding:2px 7px;
+}
+.sec-title{
+  font-family:'Noto Serif KR',serif;
+  font-weight:700;
+  font-size:18px;
+}
+.sec-sub{
+  font-size:12.5px;
+  color:var(--ink-soft);
+  margin-left:auto;
+}
+
+.card{
+  background:var(--paper-card);
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:20px;
+}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.field{margin-bottom:14px;}
+.field:last-child{margin-bottom:0;}
+label{
+  display:block;
+  font-size:12.5px;
+  font-weight:500;
+  color:var(--forest-deep);
+  margin-bottom:6px;
+}
+input[type=text], input[type=number], input[type=date]{
+  width:100%;
+  padding:9px 10px;
+  border:1px solid var(--line);
+  border-radius:4px;
+  background:#FDFCF8;
+  font-family:'JetBrains Mono',monospace;
+  font-size:13.5px;
+  color:var(--ink);
+}
+input:focus{outline:2px solid var(--forest);outline-offset:1px;}
+
+button{
+  font-family:'Noto Sans KR',sans-serif;
+  font-weight:500;
+  font-size:13.5px;
+  border-radius:4px;
+  border:1px solid var(--forest);
+  padding:10px 16px;
+  cursor:pointer;
+  background:var(--forest);
+  color:#fff;
+  transition:transform .08s ease;
+}
+button:hover{transform:translateY(-1px);}
+button.secondary{
+  background:transparent;
+  color:var(--forest-deep);
+}
+button.stamp-btn{
+  background:var(--stamp);
+  border-color:var(--stamp);
+  font-size:15px;
+  padding:13px 22px;
+  width:100%;
+}
+button.photo-btn{
+  font-size:11.5px;
+  padding:5px 9px;
+  white-space:nowrap;
+}
+button:disabled{opacity:0.4;cursor:not-allowed;transform:none;}
+
+.hint{font-size:12px;color:var(--ink-soft);margin-top:6px;}
+
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:13px;}
+th{
+  text-align:left;
+  font-family:'Noto Sans KR',sans-serif;
+  font-weight:500;
+  font-size:11.5px;
+  color:var(--ink-soft);
+  border-bottom:1px solid var(--ink);
+  padding:6px 8px;
+}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
+td input{padding:5px 7px;font-size:13px;}
+.num-col{width:64px;}
+
+.table-scroll{max-height:420px;overflow-y:auto;border:1px solid var(--line);border-radius:4px;}
+.table-scroll table{width:100%;}
+.table-scroll thead th{position:sticky;top:0;background:var(--paper-card);}
+
+.bulk{margin-top:14px;}
+textarea{
+  width:100%;
+  min-height:90px;
+  border:1px solid var(--line);
+  border-radius:4px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:12.5px;
+  padding:9px 10px;
+  background:#FDFCF8;
+  resize:vertical;
+}
+
+.ratio-line{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  font-family:'JetBrains Mono',monospace;
+  font-size:13px;
+  color:var(--ink-soft);
+  margin-bottom:14px;
+  padding:10px 14px;
+  background:var(--warn-bg);
+  border-radius:4px;
+}
+.ratio-line b{color:var(--stamp);font-size:16px;}
+
+.result-card{
+  border:2px solid var(--stamp);
+  border-radius:6px;
+  padding:22px;
+  background:#FFFDF8;
+  position:relative;
+  overflow:hidden;
+}
+.stamp-mark{
+  position:absolute;
+  top:18px;right:18px;
+  width:78px;height:78px;
+  border:3px solid var(--stamp);
+  border-radius:50%;
+  color:var(--stamp);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-family:'Noto Serif KR',serif;
+  font-weight:700;
+  font-size:13px;
+  text-align:center;
+  transform:rotate(-14deg);
+  line-height:1.2;
+  opacity:0.85;
+}
+.result-meta{
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;
+  color:var(--ink-soft);
+  margin-bottom:16px;
+  padding-right:90px;
+}
+.result-meta div{margin-bottom:3px;}
+.chosen-numbers{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-bottom:18px;
+  padding-right:90px;
+}
+.chip{
+  font-family:'JetBrains Mono',monospace;
+  font-weight:700;
+  font-size:14px;
+  background:var(--forest);
+  color:#fff;
+  padding:6px 12px;
+  border-radius:3px;
+}
+.actions-row{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
+.excluded-toggle{
+  margin-top:18px;
+  font-size:12.5px;
+  color:var(--ink-soft);
+  cursor:pointer;
+  user-select:none;
+}
+.excluded-toggle:hover{color:var(--forest);}
+.excluded-list{
+  margin-top:8px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:12.5px;
+  color:var(--ink-soft);
+  display:none;
+  line-height:1.9;
+}
+.excluded-list.open{display:block;}
+
+.method-note{
+  margin-top:22px;
+  font-size:11.5px;
+  color:var(--ink-soft);
+  border-top:1px dashed var(--line);
+  padding-top:14px;
+}
+
+/* 사진 첨부 관련 */
+.habitat-photo-preview img{
+  max-width:220px;
+  border-radius:4px;
+  border:1px solid var(--line);
+  display:block;
+  margin-top:8px;
+}
+.photo-thumb-row{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+.photo-thumb-wrap{position:relative;display:inline-block;}
+.photo-thumb{
+  width:30px;height:30px;
+  object-fit:cover;
+  border-radius:3px;
+  border:1px solid var(--line);
+  display:block;
+}
+.photo-remove{
+  position:absolute;
+  top:-6px;right:-6px;
+  width:14px;height:14px;
+  background:var(--stamp);
+  color:#fff;
+  border-radius:50%;
+  font-size:10px;
+  line-height:14px;
+  text-align:center;
+  cursor:pointer;
+}
+.photo-col{min-width:150px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <div class="eyebrow">Field Sampling Tool · 조사 준비 도구</div>
+      <h1>패치 무작위 추출기</h1>
+    </div>
+    <div class="top-meta">RANDOM PATCH SAMPLER<br>60% STRATIFIED-FREE DRAW</div>
+  </header>
+
+  <!-- 01 기본정보 -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <span class="sec-title">기본정보</span>
+    </div>
+    <div class="card">
+      <div class="grid2">
+        <div class="field">
+          <label for="habitatId">Habitat ID</label>
+          <input type="text" id="habitatId" placeholder="예: HB-2026-JJ-03">
+        </div>
+        <div class="field">
+          <label for="surveyDate">조사 날짜</label>
+          <input type="date" id="surveyDate">
+        </div>
+      </div>
+      <div class="field">
+        <label for="totalPatches">서식지 내 총 패치 수</label>
+        <input type="number" id="totalPatches" min="1" step="1" placeholder="예: 42">
+        <div class="hint">확인된 전체 패치 수를 입력한 뒤 아래에서 목록을 생성하세요.</div>
+      </div>
+      <div class="field">
+        <label>서식지 전경사진</label>
+        <button type="button" class="secondary photo-btn" id="habitatPhotoBtn">사진 촬영 / 첨부</button>
+        <input type="file" id="habitatPhotoInput" accept="image/*" capture="environment" style="display:none;">
+        <div class="habitat-photo-preview" id="habitatPhotoPreview"></div>
+      </div>
+      <button id="genTableBtn">패치 목록 생성</button>
+    </div>
+  </section>
+
+  <!-- 02 패치입력 -->
+  <section id="patchSection" style="display:none;">
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <span class="sec-title">패치 목록 입력</span>
+      <span class="sec-sub" id="patchCountLabel"></span>
+    </div>
+    <div class="card">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th class="num-col">패치 번호</th>
+              <th>지리좌표 (위도, 경도)</th>
+              <th class="photo-col">현장사진</th>
+            </tr>
+          </thead>
+          <tbody id="patchTableBody"></tbody>
+        </table>
+      </div>
+      <input type="file" id="patchPhotoInput" accept="image/*" capture="environment" multiple style="display:none;">
+
+      <div class="bulk">
+        <label for="bulkPaste">일괄 입력 (선택) — 한 줄에 "번호,위도,경도" 형식으로 붙여넣기</label>
+        <textarea id="bulkPaste" placeholder="1,37.1234,128.4567&#10;2,37.1250,128.4590&#10;3,37.1266,128.4602"></textarea>
+        <button class="secondary" id="applyBulkBtn" style="margin-top:8px;">붙여넣은 좌표 적용</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 무작위 추출 -->
+  <section id="drawSection" style="display:none;">
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <span class="sec-title">무작위 추출</span>
+    </div>
+    <div class="card">
+      <div class="ratio-line">
+        <span>추출 비율 60% 적용 시 조사 대상</span>
+        <span><b id="sampleSizePreview">0</b> / <span id="totalPreview">0</span> 패치</span>
+      </div>
+      <button class="stamp-btn" id="drawBtn">60% 무작위 추출 실행</button>
+    </div>
+
+    <div id="resultWrap" style="margin-top:22px;display:none;">
+      <div class="result-card">
+        <div class="stamp-mark">조사<br>대상<br>확정</div>
+        <div class="result-meta">
+          <div id="metaHabitat"></div>
+          <div id="metaDate"></div>
+          <div id="metaRatio"></div>
+          <div id="metaTimestamp"></div>
+        </div>
+        <div class="chosen-numbers" id="chosenChips"></div>
+
+        <div class="table-scroll" style="max-height:260px;">
+          <table>
+            <thead><tr><th class="num-col">패치 번호</th><th>지리좌표</th></tr></thead>
+            <tbody id="chosenTableBody"></tbody>
+          </table>
+        </div>
+
+        <div class="actions-row">
+          <button class="secondary" id="pdfBtn">PDF로 저장</button>
+          <button class="secondary" id="copyBtn">결과 복사</button>
+          <button class="secondary" id="downloadBtn">CSV 다운로드</button>
+          <button class="secondary" id="redrawBtn">다시 추출</button>
+        </div>
+
+        <div class="excluded-toggle" id="excludedToggle">▸ 미선정 패치 목록 보기</div>
+        <div class="excluded-list" id="excludedList"></div>
+
+        <div class="method-note">
+          방법: Web Crypto API(crypto.getRandomValues) 기반 Fisher–Yates 셔플로 전체 패치를 무작위 정렬한 뒤 상위 60%(반올림)를 추출. 재현을 위해 추출 시각을 기록함. PDF에는 입력한 기본정보, 추출 결과, 서식지 전경사진, 첨부된 패치별 현장사진이 함께 포함됨.
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+let patches = []; // {number, coord, photos: [dataURL, ...]}
+let habitatPhoto = null; // dataURL
+let currentPhotoTargetIdx = null;
+let lastResult = null;
+
+const totalPatchesInput = document.getElementById('totalPatches');
+const genTableBtn = document.getElementById('genTableBtn');
+const patchSection = document.getElementById('patchSection');
+const patchTableBody = document.getElementById('patchTableBody');
+const patchCountLabel = document.getElementById('patchCountLabel');
+const drawSection = document.getElementById('drawSection');
+const sampleSizePreview = document.getElementById('sampleSizePreview');
+const totalPreview = document.getElementById('totalPreview');
+const resultWrap = document.getElementById('resultWrap');
+const applyBulkBtn = document.getElementById('applyBulkBtn');
+const bulkPaste = document.getElementById('bulkPaste');
+const patchPhotoInput = document.getElementById('patchPhotoInput');
+
+function sampleSize(n){ return Math.round(n * 0.6); }
+
+// ---- 이미지 압축 (휴대폰 카메라 원본 대응) ----
+function compressImage(file, maxWidth = 1000, quality = 0.72){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if(w > maxWidth){ h = Math.round(h * (maxWidth / w)); w = maxWidth; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ---- 서식지 전경사진 ----
+document.getElementById('habitatPhotoBtn').addEventListener('click', () => {
+  document.getElementById('habitatPhotoInput').click();
+});
+document.getElementById('habitatPhotoInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  habitatPhoto = await compressImage(file);
+  renderHabitatPhotoPreview();
+  e.target.value = '';
+});
+function renderHabitatPhotoPreview(){
+  const el = document.getElementById('habitatPhotoPreview');
+  if(!habitatPhoto){ el.innerHTML = ''; return; }
+  el.innerHTML = `<img src="${habitatPhoto}" alt="서식지 전경사진"><button type="button" class="secondary photo-btn" id="removeHabitatPhoto" style="margin-top:6px;">사진 제거</button>`;
+  document.getElementById('removeHabitatPhoto').addEventListener('click', () => {
+    habitatPhoto = null;
+    renderHabitatPhotoPreview();
+  });
+}
+
+// ---- 패치 목록 생성 ----
+genTableBtn.addEventListener('click', () => {
+  const n = parseInt(totalPatchesInput.value, 10);
+  if(!n || n < 1){
+    alert('총 패치 수를 1 이상의 숫자로 입력해주세요.');
+    return;
+  }
+  patches = Array.from({length:n}, (_, i) => ({number:String(i+1), coord:'', photos:[]}));
+  renderPatchTable();
+  patchSection.style.display = 'block';
+  drawSection.style.display = 'block';
+  patchCountLabel.textContent = `총 ${n}개`;
+  totalPreview.textContent = n;
+  sampleSizePreview.textContent = sampleSize(n);
+  resultWrap.style.display = 'none';
+});
+
+function renderPatchTable(){
+  patchTableBody.innerHTML = '';
+  patches.forEach((p, idx) => {
+    const tr = document.createElement('tr');
+    const thumbs = p.photos.map((ph, pi) => `
+      <span class="photo-thumb-wrap">
+        <img class="photo-thumb" src="${ph}">
+        <span class="photo-remove" data-remove-idx="${idx}" data-remove-pi="${pi}">×</span>
+      </span>`).join('');
+    tr.innerHTML = `
+      <td><input type="text" value="${p.number}" data-idx="${idx}" data-field="number"></td>
+      <td><input type="text" value="${p.coord}" data-idx="${idx}" data-field="coord" placeholder="위도, 경도"></td>
+      <td>
+        <div class="photo-thumb-row">
+          <button type="button" class="secondary photo-btn" data-photo-idx="${idx}">사진 추가</button>
+          ${thumbs}
+        </div>
+      </td>
+    `;
+    patchTableBody.appendChild(tr);
+  });
+
+  patchTableBody.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const idx = +e.target.dataset.idx;
+      const field = e.target.dataset.field;
+      patches[idx][field] = e.target.value;
+    });
+  });
+  patchTableBody.querySelectorAll('button[data-photo-idx]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentPhotoTargetIdx = +btn.dataset.photoIdx;
+      patchPhotoInput.click();
+    });
+  });
+  patchTableBody.querySelectorAll('.photo-remove').forEach(span => {
+    span.addEventListener('click', () => {
+      const idx = +span.dataset.removeIdx;
+      const pi = +span.dataset.removePi;
+      patches[idx].photos.splice(pi, 1);
+      renderPatchTable();
+    });
+  });
+}
+
+patchPhotoInput.addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  if(currentPhotoTargetIdx === null || files.length === 0){ e.target.value = ''; return; }
+  for(const file of files){
+    const compressed = await compressImage(file);
+    patches[currentPhotoTargetIdx].photos.push(compressed);
+  }
+  renderPatchTable();
+  e.target.value = '';
+});
+
+applyBulkBtn.addEventListener('click', () => {
+  const lines = bulkPaste.value.split('\n').map(l => l.trim()).filter(Boolean);
+  let applied = 0;
+  lines.forEach(line => {
+    const parts = line.split(',').map(s => s.trim());
+    if(parts.length < 3) return;
+    const num = parts[0];
+    const coord = parts.slice(1).join(', ');
+    const target = patches.find(p => p.number === num);
+    if(target){ target.coord = coord; applied++; }
+  });
+  renderPatchTable();
+  alert(`${applied}개 패치에 좌표를 적용했습니다.`);
+});
+
+// ---- 무작위 추출 ----
+function secureShuffle(arr){
+  const a = arr.slice();
+  const rnd = new Uint32Array(a.length);
+  crypto.getRandomValues(rnd);
+  for(let i = a.length - 1; i > 0; i--){
+    const j = rnd[i] % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+document.getElementById('drawBtn').addEventListener('click', runDraw);
+document.getElementById('redrawBtn').addEventListener('click', runDraw);
+
+function runDraw(){
+  if(patches.length === 0) return;
+  const n = sampleSize(patches.length);
+  const shuffled = secureShuffle(patches);
+  const byNum = (a,b) => Number(a.number) - Number(b.number) || a.number.localeCompare(b.number);
+  const chosen = shuffled.slice(0, n).slice().sort(byNum);
+  const excluded = shuffled.slice(n).slice().sort(byNum);
+
+  const habitatId = document.getElementById('habitatId').value || '(미입력)';
+  const surveyDate = document.getElementById('surveyDate').value || '(미입력)';
+  const timestamp = new Date().toLocaleString('ko-KR');
+
+  lastResult = {habitatId, surveyDate, timestamp, total: patches.length, n, chosen, excluded};
+
+  document.getElementById('metaHabitat').textContent = `Habitat ID: ${habitatId}`;
+  document.getElementById('metaDate').textContent = `조사 날짜: ${surveyDate}`;
+  document.getElementById('metaRatio').textContent = `추출: ${n} / ${patches.length} 패치 (60%)`;
+  document.getElementById('metaTimestamp').textContent = `추출 시각: ${timestamp}`;
+
+  document.getElementById('chosenChips').innerHTML =
+    chosen.map(p => `<span class="chip">#${p.number}</span>`).join('');
+
+  document.getElementById('chosenTableBody').innerHTML =
+    chosen.map(p => `<tr><td>${p.number}</td><td>${p.coord || '—'}</td></tr>`).join('');
+
+  const exList = document.getElementById('excludedList');
+  exList.innerHTML = excluded.map(p => `#${p.number}`).join(', ') || '없음';
+  exList.classList.remove('open');
+  document.getElementById('excludedToggle').textContent = '▸ 미선정 패치 목록 보기';
+
+  resultWrap.style.display = 'block';
+  resultWrap.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+document.getElementById('excludedToggle').addEventListener('click', () => {
+  const el = document.getElementById('excludedList');
+  const btn = document.getElementById('excludedToggle');
+  el.classList.toggle('open');
+  btn.textContent = el.classList.contains('open') ? '▾ 미선정 패치 목록 숨기기' : '▸ 미선정 패치 목록 보기';
+});
+
+// ---- 텍스트 복사 / CSV ----
+function buildTextResult(){
+  if(!lastResult) return '';
+  const r = lastResult;
+  let text = `Habitat ID: ${r.habitatId}\n조사 날짜: ${r.surveyDate}\n추출 시각: ${r.timestamp}\n추출: ${r.n} / ${r.total} (60%)\n\n조사 대상 패치:\n`;
+  text += r.chosen.map(p => `#${p.number}\t${p.coord || '—'}`).join('\n');
+  return text;
+}
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+  navigator.clipboard.writeText(buildTextResult()).then(() => alert('결과를 클립보드에 복사했습니다.'));
+});
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  if(!lastResult) return;
+  const r = lastResult;
+  let csv = 'habitat_id,survey_date,extraction_timestamp,patch_number,coordinates,status,photo_count\n';
+  r.chosen.forEach(p => {
+    csv += `${r.habitatId},${r.surveyDate},${r.timestamp},${p.number},"${p.coord}",selected,${p.photos ? p.photos.length : 0}\n`;
+  });
+  r.excluded.forEach(p => {
+    csv += `${r.habitatId},${r.surveyDate},${r.timestamp},${p.number},"${p.coord}",not_selected,${p.photos ? p.photos.length : 0}\n`;
+  });
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `patch_sample_${(r.habitatId||'habitat').replace(/\s+/g,'_')}_${r.surveyDate}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ---- PDF 생성 ----
+function ensureSpace(doc, y, needed, margin){
+  const pageH = doc.internal.pageSize.getHeight();
+  if(y + needed > pageH - margin){
+    doc.addPage();
+    return margin;
+  }
+  return y;
+}
+
+document.getElementById('pdfBtn').addEventListener('click', generatePDF);
+
+function generatePDF(){
+  if(!lastResult){ alert('먼저 무작위 추출을 실행해주세요.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'a4'});
+  const marginX = 40, marginTopBottom = 40;
+  const pageW = doc.internal.pageSize.getWidth();
+  const contentW = pageW - marginX * 2;
+  let y = 50;
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(17);
+  doc.text('패치 무작위 추출 조사기록', marginX, y);
+  y += 26;
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  [
+    `Habitat ID: ${lastResult.habitatId}`,
+    `조사 날짜: ${lastResult.surveyDate}`,
+    `총 패치 수: ${lastResult.total}`,
+    `추출 패치 수: ${lastResult.n} (60%)`,
+    `추출 시각(기록): ${lastResult.timestamp}`,
+    `PDF 생성 시각: ${new Date().toLocaleString('ko-KR')}`
+  ].forEach(line => { doc.text(line, marginX, y); y += 15; });
+  y += 6;
+
+  if(habitatPhoto){
+    try{
+      const props = doc.getImageProperties(habitatPhoto);
+      const maxW = 260, maxH = 190;
+      const scale = Math.min(maxW / props.width, maxH / props.height, 1);
+      const w = props.width * scale, h = props.height * scale;
+      y = ensureSpace(doc, y, h + 22, marginTopBottom);
+      doc.setFontSize(9);
+      doc.text('서식지 전경사진', marginX, y);
+      y += 8;
+      doc.addImage(habitatPhoto, 'JPEG', marginX, y, w, h);
+      y += h + 18;
+    }catch(err){ console.error('habitat photo embed failed', err); }
+  }
+
+  y = ensureSpace(doc, y, 40, marginTopBottom);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(12);
+  doc.text('조사 대상 패치 목록 (무작위 추출)', marginX, y);
+
+  doc.autoTable({
+    startY: y + 8,
+    margin: {left: marginX, right: marginX},
+    head: [['패치 번호','좌표']],
+    body: lastResult.chosen.map(p => [p.number, p.coord || '—']),
+    styles: {fontSize:9, cellPadding:4},
+    headStyles: {fillColor:[47,74,60]},
+  });
+  y = doc.lastAutoTable.finalY + 20;
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  const exText = `미선정 패치: ${lastResult.excluded.map(p => '#'+p.number).join(', ') || '없음'}`;
+  const splitEx = doc.splitTextToSize(exText, contentW);
+  y = ensureSpace(doc, y, splitEx.length * 12 + 10, marginTopBottom);
+  doc.text(splitEx, marginX, y);
+  y += splitEx.length * 12 + 20;
+
+  const patchesWithPhotos = patches.filter(p => p.photos && p.photos.length > 0);
+  if(patchesWithPhotos.length > 0){
+    y = ensureSpace(doc, y, 30, marginTopBottom);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(12);
+    doc.text('패치별 현장사진 (발견된 모든 패치)', marginX, y);
+    y += 18;
+
+    const selectedNums = new Set(lastResult.chosen.map(p => p.number));
+
+    patchesWithPhotos.forEach(p => {
+      y = ensureSpace(doc, y, 26, marginTopBottom);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(10);
+      const tag = selectedNums.has(p.number) ? '[조사대상]' : '[미선정]';
+      doc.text(`#${p.number}  (${p.coord || '좌표 미입력'})  ${tag}`, marginX, y);
+      y += 10;
+
+      const thumbSize = 110, gap = 10;
+      let x = marginX, rowMaxH = 0;
+
+      p.photos.forEach(photo => {
+        let props;
+        try{ props = doc.getImageProperties(photo); }catch(err){ return; }
+        const scale = Math.min(thumbSize / props.width, thumbSize / props.height, 1);
+        const w = props.width * scale, h = props.height * scale;
+
+        if(x + w > marginX + contentW){
+          x = marginX;
+          y += rowMaxH + gap;
+          rowMaxH = 0;
+          y = ensureSpace(doc, y, thumbSize + gap, marginTopBottom);
+        }
+        y = ensureSpace(doc, y, h, marginTopBottom);
+        doc.addImage(photo, 'JPEG', x, y, w, h);
+        x += w + gap;
+        rowMaxH = Math.max(rowMaxH, h);
+      });
+      y += rowMaxH + 22;
+    });
+  }
+
+  const filename = `patch_survey_${(lastResult.habitatId||'habitat').replace(/\s+/g,'_')}_${lastResult.surveyDate}.pdf`;
+  doc.save(filename);
+}
+</script>
+</body>
+</html>
